@@ -574,6 +574,8 @@ pub struct FileHash<'input> {
     pub types: HashMap<TypeOffset, &'input Type<'input>>,
     // The type corresponding to `TypeOffset::none()`.
     pub(crate) void: Type<'input>,
+    /// All functions by linkage_name or name
+    pub functions_by_linkage_name: HashMap<String, &'input Function<'input>>,
 }
 
 impl<'input> FileHash<'input> {
@@ -583,10 +585,28 @@ impl<'input> FileHash<'input> {
             file,
             functions_by_address: FileHash::functions_by_address(file),
             functions_by_offset: FileHash::functions_by_offset(file),
+            functions_by_linkage_name: FileHash::functions_by_linkage_name(file),
             variables_by_address: FileHash::variables_by_address(file),
             types: FileHash::types(file),
             void: Type::void(),
         }
+    }
+
+    /// TODO
+    fn functions_by_linkage_name<'a>(
+        file: &'a File<'input>,
+    ) -> HashMap<String, &'a Function<'input>> {
+        let mut functions = HashMap::default();
+        for unit in &file.units {
+            for function in &unit.functions {
+                if let Some(name) = function.linkage_name() {
+                    functions.insert(name.to_owned(), function);
+                } else if let Some(name) = function.name() {
+                    functions.insert(name.to_owned(), function);
+                }
+            }
+        }
+        functions
     }
 
     /// Returns a map from address to function for all functions in the file.
