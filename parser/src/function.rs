@@ -57,6 +57,17 @@ impl Default for FunctionOffset {
     }
 }
 
+/// Function frame base addr
+#[derive(Debug, Clone)]
+pub enum DataLocation {
+    /// Wasm local
+    WasmLocal(u32),
+    /// Wasm global
+    WasmGlobal(u32),
+    /// Offset added to the func base (DW_AT_frame_base attr)
+    OffsetFromBase(i64),
+}
+
 /// A function.
 #[derive(Debug, Default)]
 pub struct Function<'input> {
@@ -74,6 +85,7 @@ pub struct Function<'input> {
     pub(crate) declaration: bool,
     pub(crate) parameters: Vec<ParameterType<'input>>,
     pub(crate) return_type: TypeOffset,
+    pub(crate) frame_base: Option<DataLocation>,
 }
 
 /// Extra function details.
@@ -185,6 +197,12 @@ impl<'input> Function<'input> {
         Type::from_offset(hash, self.return_type)
     }
 
+    #[inline]
+    /// Get the base addr of the frame
+    pub fn frame_base<'a>(&self) -> Option<&DataLocation> {
+        self.frame_base.as_ref()
+    }
+
     /// Extra function details.
     pub fn details(&self, hash: &FileHash<'input>) -> FunctionDetails<'input> {
         hash.file.get_function_details(self.offset, hash)
@@ -227,13 +245,20 @@ impl<'input> FunctionDetails<'input> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct ParameterOffset(usize);
+/// A function parameter offset
+pub struct ParameterOffset(usize);
 
 impl ParameterOffset {
     #[inline]
     pub(crate) fn new(offset: usize) -> ParameterOffset {
         debug_assert!(ParameterOffset(offset) != ParameterOffset::none());
         ParameterOffset(offset)
+    }
+
+    #[inline]
+    /// Get the value
+    pub fn get(&self) -> usize {
+        self.0
     }
 
     #[inline]
@@ -257,6 +282,8 @@ pub struct Parameter<'input> {
     pub(crate) ty: TypeOffset,
     // TODO: move this to ParameterDetails
     pub(crate) locations: Vec<(Range, Piece)>,
+
+    pub(crate) data_location: Option<DataLocation>,
 }
 
 impl<'input> Parameter<'input> {
@@ -272,6 +299,12 @@ impl<'input> Parameter<'input> {
     #[inline]
     pub fn type_offset(&self) -> TypeOffset {
         self.ty
+    }
+
+    /// Data location (DW_AT_location attr)
+    #[inline]
+    pub fn data_location(&self) -> Option<&DataLocation> {
+        self.data_location.as_ref()
     }
 
     /// The type of the parameter.

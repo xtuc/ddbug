@@ -1,3 +1,4 @@
+use gimli::ReaderOffset;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::mem;
@@ -11,7 +12,8 @@ use object::{self, ObjectSection, ObjectSymbol};
 use crate::cfi::{Cfi, CfiDirective};
 use crate::file::{Architecture, Arena, DebugInfo, FileHash};
 use crate::function::{
-    Function, FunctionDetails, FunctionOffset, InlinedFunction, Parameter, ParameterOffset,
+    DataLocation, Function, FunctionDetails, FunctionOffset, InlinedFunction, Parameter,
+    ParameterOffset,
 };
 use crate::location::{Location, Piece, Register};
 use crate::namespace::{Namespace, NamespaceKind};
@@ -452,6 +454,7 @@ where
 {
     let mut unit = Unit::default();
     unit.address_size = Some(u64::from(dwarf_unit.header.address_size()));
+    unit.encoding = Some(dwarf_unit.encoding());
 
     let mut subprograms = Vec::new();
     let mut variables = Vec::new();
@@ -1544,6 +1547,9 @@ where
                 }
             }
             gimli::DW_AT_data_member_location => {
+                if let Some(v) = attr.udata_value() {
+                    member.data_location = Some(v);
+                }
                 if let Some(offset) = parse_data_member_location(dwarf_unit, &attr) {
                     member.bit_offset = offset;
                 }
@@ -2186,6 +2192,7 @@ where
         declaration: false,
         parameters: Vec::new(),
         return_type: TypeOffset::none(),
+        frame_base: None,
     };
 
     let mut specification = None;
@@ -2257,7 +2264,12 @@ where
                 }
             }
             gimli::DW_AT_frame_base => {
-                // FIXME
+                if let gimli::AttributeValue::Exprloc(data) = attr.value() {
+                    function.frame_base =
+                        Some(convert_dw_at_location(unit.encoding.unwrap(), data));
+                } else {
+                    unimplemented!();
+                }
             }
             gimli::DW_AT_external
             | gimli::DW_AT_call_all_calls
@@ -2576,24 +2588,27 @@ where
             gimli::DW_AT_location => {
                 match attr.value() {
                     gimli::AttributeValue::Exprloc(expr) => {
-                        evaluate_parameter_location(
-                            &dwarf_unit.header,
-                            Range::all(),
-                            expr,
-                            &mut parameter,
-                        );
+                        parameter.data_location =
+                            Some(convert_dw_at_location(dwarf_unit.encoding(), expr));
+
+                        // evaluate_parameter_location(
+                        //     &dwarf_unit.header,
+                        //     Range::all(),
+                        //     expr,
+                        //     &mut parameter,
+                        // );
                     }
-                    gimli::AttributeValue::LocationListsRef(offset) => {
-                        let mut locations = dwarf.read.locations(dwarf_unit, offset)?;
-                        while let Some(location) = locations.next()? {
-                            // TODO: use location.range too
-                            evaluate_parameter_location(
-                                &dwarf_unit.header,
-                                location.range.into(),
-                                location.data,
-                                &mut parameter,
-                            );
-                        }
+                    gimli::AttributeValue::LocationListsRef(_offset) => {
+                        // let mut locations = dwarf.read.locations(dwarf_unit, offset)?;
+                        // while let Some(location) = locations.next()? {
+                        //     // TODO: use location.range too
+                        //     evaluate_parameter_location(
+                        //         &dwarf_unit.header,
+                        //         location.range.into(),
+                        //         location.data,
+                        //         &mut parameter,
+                        //     );
+                        // }
                     }
                     _ => {
                         debug!("unknown parameter DW_AT_location: {:?}", attr.value());
@@ -4238,4 +4253,33 @@ fn convert_cfi<R: gimli::Reader>(
         }
         gimli::CallFrameInstruction::Nop => None,
     }
+}
+
+pub(crate) fn convert_dw_at_location<R: gimli::Reader>(
+    encoding: gimli::Encoding,
+    data: gimli::Expression<R>,
+) -> DataLocation {
+    let mut pc = data.0.clone();
+    while pc.len().into_u64() != 0 {
+        match gimli::Operation::parse(&mut pc, encoding) {
+            Ok(op) => match op {
+                gimli::Operation::WasmLocal { index } => {
+                    return DataLocation::WasmLocal(index);
+                }
+                gimli::Operation::WasmGlobal { index } => {
+                    return DataLocation::WasmGlobal(index);
+                }
+                gimli::Operation::FrameOffset { offset } => {
+                    return DataLocation::OffsetFromBase(offset);
+                }
+
+                e => unimplemented!("{:x?}", e),
+            },
+            Err(err) => {
+                panic!("failed to parse operation: {}", err);
+            }
+        }
+    }
+
+    unimplemented!()
 }

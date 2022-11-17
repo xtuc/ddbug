@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use std::cmp;
+use std::fmt;
 use std::marker;
 use std::sync::Arc;
 use std::usize;
 
 use crate::file::FileHash;
+use crate::function::DataLocation;
 use crate::function::ParameterOffset;
 use crate::namespace::Namespace;
 use crate::source::Source;
@@ -66,7 +68,8 @@ pub struct TypeOffset(usize);
 
 impl TypeOffset {
     #[inline]
-    pub(crate) fn new(offset: usize) -> TypeOffset {
+    /// New TypeOffset
+    pub fn new(offset: usize) -> TypeOffset {
         debug_assert!(TypeOffset(offset) != TypeOffset::none());
         TypeOffset(offset)
     }
@@ -120,6 +123,33 @@ impl<'input> Default for Type<'input> {
             offset: TypeOffset::none(),
             kind: TypeKind::Base(BaseType::default()),
         }
+    }
+}
+
+impl<'input> fmt::Display for Type<'input> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.kind() {
+            TypeKind::Struct(struct_type) => {
+                if let Some(name) = struct_type.name() {
+                    write!(f, "{}", name)?;
+                }
+            }
+            TypeKind::Modifier(type_modifier) => {
+                if let Some(name) = type_modifier.name() {
+                    write!(f, "{}", name)?;
+                }
+            }
+            TypeKind::Base(base_type) => {
+                if let Some(name) = base_type.name() {
+                    write!(f, "{}", name)?;
+                }
+            }
+            _ => {
+                write!(f, "{:?}", self)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -895,7 +925,8 @@ impl<'input> Variant<'input> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct MemberOffset(usize);
+/// Relative offset of struct member
+pub struct MemberOffset(usize);
 
 impl MemberOffset {
     #[inline]
@@ -907,6 +938,12 @@ impl MemberOffset {
     #[inline]
     pub(crate) fn none() -> MemberOffset {
         MemberOffset(usize::MAX)
+    }
+
+    #[inline]
+    /// Get the offset value
+    pub fn get(&self) -> usize {
+        self.0
     }
 }
 
@@ -926,6 +963,8 @@ pub struct Member<'input> {
     // Defaults to 0, so always present.
     pub(crate) bit_offset: u64,
     pub(crate) bit_size: Size,
+    // DW_AT_data_member_location
+    pub(crate) data_location: Option<u64>,
 }
 
 impl<'input> Member<'input> {
@@ -933,6 +972,12 @@ impl<'input> Member<'input> {
     #[inline]
     pub fn name(&self) -> Option<&str> {
         self.name
+    }
+
+    /// DW_AT_data_member_location attribute
+    #[inline]
+    pub fn data_location(&self) -> Option<u64> {
+        self.data_location
     }
 
     /// The debuginfo offset of the type of this member.
@@ -1434,6 +1479,12 @@ pub struct ParameterType<'input> {
 }
 
 impl<'input> ParameterType<'input> {
+    /// The offset of the parameter.
+    #[inline]
+    pub fn offset(&self) -> ParameterOffset {
+        self.offset
+    }
+
     /// The name of the parameter.
     #[inline]
     pub fn name(&self) -> Option<&'input str> {

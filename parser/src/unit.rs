@@ -23,6 +23,7 @@ pub struct Unit<'input> {
     pub(crate) types: Vec<Type<'input>>,
     pub(crate) functions: Vec<Function<'input>>,
     pub(crate) variables: Vec<Variable<'input>>,
+    pub(crate) encoding: Option<gimli::Encoding>,
 }
 
 impl<'input> Unit<'input> {
