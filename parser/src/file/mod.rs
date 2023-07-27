@@ -9,6 +9,7 @@ mod dwarf;
 
 use fnv::FnvHashMap as HashMap;
 use gimli;
+#[cfg(not(target_family = "wasm"))]
 use memmap;
 use object::{self, Object, ObjectSection, ObjectSegment, ObjectSymbol, ObjectSymbolTable};
 
@@ -67,7 +68,8 @@ where
     }
 }
 
-pub(crate) struct Arena {
+/// todo
+pub struct Arena {
     // TODO: can these be a single `Vec<Box<dyn ??>>`?
     buffers: Mutex<Vec<Vec<u8>>>,
     strings: Mutex<Vec<String>>,
@@ -75,7 +77,8 @@ pub(crate) struct Arena {
 }
 
 impl Arena {
-    fn new() -> Self {
+    /// todo
+    pub fn new() -> Self {
         Arena {
             buffers: Mutex::new(Vec::new()),
             strings: Mutex::new(Vec::new()),
@@ -126,11 +129,13 @@ pub use object::Architecture;
 pub struct FileContext {
     // Self-referential, not actually `static.
     file: File<'static>,
+    #[cfg(not(target_family = "wasm"))]
     _map: memmap::Mmap,
     _arena: Box<Arena>,
 }
 
 impl FileContext {
+    #[cfg(not(target_family = "wasm"))]
     fn new<F>(map: memmap::Mmap, f: F) -> Result<FileContext>
     where
         F: for<'a> FnOnce(&'a [u8], &'a Arena) -> Result<File<'a>>,
@@ -188,6 +193,7 @@ impl<'input> File<'input> {
     }
 
     /// Parse the file with the given path.
+    #[cfg(not(target_family = "wasm"))]
     pub fn parse(path: String) -> Result<FileContext> {
         let handle = match fs::File::open(&path) {
             Ok(handle) => handle,
@@ -211,7 +217,8 @@ impl<'input> File<'input> {
         })
     }
 
-    fn parse_object(
+    /// todo
+    pub fn parse_object(
         object: &object::File<'input>,
         debug_object: &object::File<'input>,
         path: String,
