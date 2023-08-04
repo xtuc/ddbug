@@ -4273,7 +4273,7 @@ pub(crate) fn convert_dw_at_location<R: gimli::Reader>(
                     return DataLocation::OffsetFromBase(offset);
                 }
 
-                e => unimplemented!("{:x?}", e),
+                _ => {}
             },
             Err(err) => {
                 panic!("failed to parse operation: {}", err);
@@ -4281,5 +4281,5 @@ pub(crate) fn convert_dw_at_location<R: gimli::Reader>(
         }
     }
 
-    unimplemented!()
+    DataLocation::Unknown
 }

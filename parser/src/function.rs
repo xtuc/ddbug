@@ -66,6 +66,9 @@ pub enum DataLocation {
     WasmGlobal(u32),
     /// Offset added to the func base (DW_AT_frame_base attr)
     OffsetFromBase(i64),
+
+    /// TODO
+    Unknown,
 }
 
 /// A function.
